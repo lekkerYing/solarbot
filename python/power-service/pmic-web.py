@@ -681,9 +681,83 @@ PAGE = """<!doctype html>
  .i.l:hover::after,.i.l:focus::after{left:-4px;right:auto;transform:none}
  /* A roomier one, for the note that explains the whole measurement. */
  .i.wide:hover::after,.i.wide:focus::after{width:430px}
+
+ /* The bot's own face. These are the very drawings its little screen shows,
+    so the page wears the same expression as the thing on the desk. */
+ .mast{display:flex;align-items:center;justify-content:center;gap:14px;margin:0 0 14px}
+ .mast h1{margin:0;text-align:left}
+ .face{width:76px;height:76px;flex:0 0 auto;margin:0;cursor:pointer;
+       display:flex;align-items:center;justify-content:center}
+ .face img{width:100%;height:100%;object-fit:contain;display:block}
+ .doing{font-size:11px;text-transform:uppercase;letter-spacing:.07em;opacity:.6;margin-top:3px}
+ .doing.preview{opacity:.85;font-style:italic}
+ @media (max-width:700px){.face{width:56px;height:56px}}
+
+ /* ---------------------------------------------------------------------
+    "paper": the skin taken straight from solararchive.cmama.xyz. Her site
+    downloads no font at all, so prose falls back to the browser's serif and
+    the machine readable parts are Courier. Headings are not bold, corners
+    are never rounded (one border-radius in her whole stylesheet), and things
+    are separated by rules rather than boxed in. Switch it at the bottom
+    right; the choice is remembered. */
+ html.paper body{font-family:Georgia,"Times New Roman",serif;color:#000}
+ html.paper h1,html.paper h2{font-weight:normal}
+ html.paper h1{text-indent:-.15rem}
+ /* Courier for every number: her machine voice, and the digits keep the same
+    width so a reading no longer jitters while it changes */
+ html.paper .big,html.paper .lbl,html.paper .doing,html.paper .tag,
+ html.paper .rp .when,html.paper table,html.paper #pagecost{
+   font-family:"Courier New",Courier,monospace}
+ html.paper .big{font-weight:normal}
+ html.paper .lbl{letter-spacing:0}
+ html.paper .card,html.paper .btn,html.paper button,html.paper canvas,
+ html.paper textarea,html.paper select,html.paper .rp,html.paper .tag,
+ html.paper .tabs button{border-radius:0}
+ /* cards stop being little boxes and become ruled rows */
+ html.paper .card{background:none;border:0;border-top:2px solid #000;
+   padding:8px 12px 10px 0}
+ html.paper .rp{background:none;border:0;border-top:1px solid #000}
+ html.paper canvas{background:none;border:1px solid #000}
+ html.paper button,html.paper .btn{background:none;color:#000;border:1px solid #000}
+ html.paper button:hover,html.paper .btn:hover{background:#000;color:#fff5d1}
+ html.paper .tabs{border-bottom:1px solid #000}
+ html.paper .tabs button.on{background:none;border-color:transparent;
+   border-bottom:2px solid #000;font-weight:normal;opacity:1}
+ html.paper a{text-decoration:none;border-bottom:1px solid;padding-bottom:.05em}
+ html.paper a:hover{color:#828282}
+ html.paper textarea,html.paper select{background:none;border:1px solid #000}
+ html.paper .tag{background:none;border:1px solid #000}
+ /* Her site states what the page weighed, down in the corner. This page is
+    about what things cost, so it says the same thing in the same place. */
+ #pagecost{display:none}
+ html.paper #pagecost{display:block;position:fixed;left:7px;bottom:5px;
+   font-size:11px;opacity:.75}
+ #skin{position:fixed;right:7px;bottom:5px;font-size:11px;cursor:pointer;
+   background:none;border:0;color:inherit;opacity:.55;padding:2px 4px;
+   font-family:"Courier New",Courier,monospace;border-radius:0}
+ #skin:hover{opacity:1}
+ /* A dropdown keeps the operating system's own look unless you take it off,
+    which is why it stayed grey and rounded while everything around it changed. */
+ html.paper select{appearance:none;-webkit-appearance:none;background:none;
+   border:1px solid #000;border-radius:0;padding:7px 26px 7px 9px;
+   font-family:"Courier New",Courier,monospace;color:#000;
+   background-image:linear-gradient(45deg,transparent 50%,#000 50%),
+                    linear-gradient(135deg,#000 50%,transparent 50%);
+   background-position:right 13px center,right 8px center;
+   background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+ html.paper select:focus{outline:1px solid #000;outline-offset:1px}
+ html.paper .sw{border-radius:0}
+ /* The bands on the live graph only appear once the bot has actually done
+    something, so this states what the colours mean even when it is asleep. */
+ .phasekey{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+ .phasekey .sw{width:16px;height:10px;border:1px solid rgba(0,0,0,.25)}
 </style>
 <header>
-<h1>Solar bot</h1>
+<div class="mast">
+  <figure class="face" id="face" tabindex="0"
+    title="What the bot is doing right now, drawn the way its own screen draws it. Click to step through the states."><img id="faceimg" alt=""></figure>
+  <div><h1>Solar bot</h1><div class="doing" id="doing">idle</div></div>
+</div>
 <div class="row strip">
   <div class="card"><div class="lbl">now<i class="i d l" tabindex="0" data-tip="Total power the Pi's internal rails are drawing at this moment. Power is a rate, like speed: it says how fast energy is being used, not how much in total."></i></div><div class="big"><span id="now">-</span> W</div></div>
   <div class="card"><div class="lbl">idle<i class="i d" tabindex="0" data-tip="What the Pi draws doing nothing: the quietest tenth of the last two minutes. Everything labelled 'cost of question' is measured against this baseline."></i></div><div class="big"><span id="idle">-</span> W</div></div>
@@ -730,6 +804,7 @@ So the real drain on the battery is higher than the joules shown here, by an amo
 To get the true battery cost, either put a sensor in the battery lead, or run a calibration on the Calibration tab."></i></div>
 </div>
 <canvas id="c" width="1200" height="440"></canvas>
+<div class="key phasekey" id="phasekey"></div>
 <div class="key"><span class="sw" style="background:#d2691e"></span>total used
   <span class="sw" style="background:#3a7d6c;margin-left:12px"></span>cpu only (VDD_CORE)
   <span class="sw" style="background:#c9a227;margin-left:12px"></span>coming in from the panel
@@ -800,6 +875,9 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div id="reportbody"></div>
 </section>
 
+<div id="pagecost"></div>
+<button id="skin" title="Switch between the original look and the one taken from the Sun Shines Bright site"></button>
+
 <script>
 const $=id=>document.getElementById(id);
 let data=[],phases=[],BAT={j:15984,mah:1200,v:3.7};
@@ -826,19 +904,57 @@ function unitNote(){
     v==='pct'?'Share of one full charge of the '+BAT.mah+' mAh pack ('+Math.round(BAT.j)+' J).':
               'How long the panel would need to make it, at its rated output.';
 }
+/* f: which of the five drawings belongs to this flow. The log calls the flows
+   by their own names, while the drawings are named after what the bot puts on
+   its screen, so the two vocabularies have to be tied together here. */
 const PH={
-  listening     :{n:'listening',    c:'rgba(74,160,90,.20)', t:'#2f6b3c'},
-  wake_listening:{n:'listening',    c:'rgba(74,160,90,.20)', t:'#2f6b3c'},
-  detecting     :{n:'detecting',    c:'rgba(74,160,90,.10)', t:'#2f6b3c'},
-  asr           :{n:'transcribing', c:'rgba(62,110,190,.20)',t:'#2b4c86'},
-  answer        :{n:'answering',    c:'rgba(210,105,30,.24)',t:'#9c4c14'},
-  image         :{n:'image',        c:'rgba(150,90,180,.18)',t:'#6b3f80'},
-  sleep         :{n:'',             c:null,                  t:''}
+  listening     :{n:'listening',    c:'rgba(74,160,90,.20)', t:'#2f6b3c', f:'listening',
+                  pc:'rgba(0,105,81,.16)',   pt:'#006951'},
+  wake_listening:{n:'listening',    c:'rgba(74,160,90,.20)', t:'#2f6b3c', f:'detecting',
+                  pc:'rgba(0,105,81,.16)',   pt:'#006951'},
+  detecting     :{n:'detecting',    c:'rgba(74,160,90,.10)', t:'#2f6b3c', f:'detecting',
+                  pc:'rgba(0,105,81,.09)',   pt:'#006951'},
+  asr           :{n:'transcribing', c:'rgba(62,110,190,.20)',t:'#2b4c86', f:'recognizing',
+                  pc:'rgba(22,45,171,.16)',  pt:'#162dab'},
+  answer        :{n:'answering',    c:'rgba(210,105,30,.24)',t:'#9c4c14', f:'answering',
+                  pc:'rgba(209,19,5,.16)',   pt:'#d11305'},
+  image         :{n:'image',        c:'rgba(150,90,180,.18)',t:'#6b3f80', f:'answering',
+                  pc:'rgba(130,130,130,.16)',pt:'#828282'},
+  sleep         :{n:'',             c:null,                  t:'',        f:'idle',
+                  pc:null,                   pt:''}
 };
+
+/* ---- the face ---------------------------------------------------------
+   Five states, three frames each. The frames ping-pong (0,1,2,1) so the
+   movement breathes instead of snapping back to the start. Clicking steps
+   through the states by hand, which is the only way to see them while the
+   chatbot itself is not running. */
+const FACES=['idle','listening','detecting','recognizing','answering'];
+const FSEQ=[0,1,2,1];
+let faceState='idle', faceStep=0, facePreview=null;
+FACES.forEach(s=>[0,1,2].forEach(i=>{const im=new Image();im.src='faces/'+s+'/'+i+'.png';}));
+function paintFace(){
+  const s=facePreview||faceState;
+  $('faceimg').src='faces/'+s+'/'+FSEQ[faceStep%FSEQ.length]+'.png';
+  $('doing').textContent=s+(facePreview?' · preview':'');
+  $('doing').classList.toggle('preview',!!facePreview);
+}
+function stepFace(){
+  const i=FACES.indexOf(facePreview||faceState);
+  facePreview=FACES[(i+1)%FACES.length];
+  if(facePreview===faceState) facePreview=null;
+  faceStep=0; paintFace();
+}
+function setFace(flow){
+  const s=(PH[flow]&&PH[flow].f)||'idle';
+  if(s===faceState) return;
+  faceState=s; faceStep=0; facePreview=null; paintFace();
+}
 async function poll(){
   try{
     const r=await fetch('api/samples');const j=await r.json();
     data=j.samples;phases=j.states||[];
+    setFace(phases.length?phases[phases.length-1][1]:'sleep');
     const last=data[data.length-1];
     if(last){$('now').textContent=last[1].toFixed(2);$('core').textContent=last[2].toFixed(2);}
     $('idle').textContent=j.idle.toFixed(2);
@@ -896,13 +1012,16 @@ function draw(){
   const peak=Math.max(10,data.reduce((a,s)=>Math.max(a,s[1],s[3]||0),0)*1.15);
   const B=30;   // room along the bottom for clock labels
   const px=t=>(t-t0)/span*W, py=w=>H-B-(w/peak)*(H-B);
+  const paper=document.documentElement.classList.contains('paper');
   for(let i=0;i<phases.length;i++){
     const p=PH[phases[i][1]];if(!p||!p.c)continue;
     const a=Math.max(0,px(phases[i][0]));
     const b=i+1<phases.length?px(phases[i+1][0]):W;
     if(b<=a)continue;
-    x.fillStyle=p.c;x.fillRect(a,0,b-a,H);
-    if(b-a>62&&p.n){x.fillStyle=p.t;x.font='600 12px system-ui';x.fillText(p.n,a+6,17);}
+    x.fillStyle=paper?p.pc:p.c;x.fillRect(a,0,b-a,H);
+    if(b-a>62&&p.n){x.fillStyle=paper?p.pt:p.t;
+      x.font=paper?'12px "Courier New",Courier,monospace':'600 12px system-ui';
+      x.fillText(p.n,a+6,17);}
   }
   x.strokeStyle='#e0d5b0';x.lineWidth=1;x.font='11px system-ui';x.fillStyle='#9a8a6a';
   const step=peak>24?4:2;
@@ -997,9 +1116,24 @@ let lastQ=[];
 // Colours are assigned in the order models first appear, so a run with one
 // model stays plain and a comparison run separates itself.
 const PALETTE=['#d2691e','#3e6ebe','#4aa05a','#9c4bb0','#c2255c','#0f8a8a','#8a6d1f'];
+/* Her site works in blue, red and green on cream, so the dots borrow those
+   first and only reach for anything else when there are more models than that. */
+const PALETTE_PAPER=['#162dab','#d11305','#006951','#000','#828282','#7a2f8f','#b06a00'];
+const isPaper=()=>document.documentElement.classList.contains('paper');
+/* Every colour the drawn charts use, in one place, so both skins stay honest. */
+function SKIN(){
+  return isPaper()
+    ? {bg:'none', edge:'#000', grid:'rgba(0,0,0,.13)', axis:'#000',
+       label:'#000', dim:'#000', radius:'0',
+       font:'"Courier New",Courier,monospace'}
+    : {bg:'#fffdf5', edge:'#c9b98a', grid:'#e6dcc0', axis:'#c9b98a',
+       label:'#6b5b3a', dim:'#9a8a6a', radius:'10px',
+       font:'system-ui,sans-serif'};
+}
 function modelColours(rows){
   const m={},out={};let i=0;
-  rows.forEach(q=>{const k=q.model||'?';if(!(k in m)){m[k]=PALETTE[i%PALETTE.length];i++;}});
+  const pal=isPaper()?PALETTE_PAPER:PALETTE;
+  rows.forEach(q=>{const k=q.model||'?';if(!(k in m)){m[k]=pal[i%pal.length];i++;}});
   Object.keys(m).forEach(k=>out[k]=m[k]);
   return out;
 }
@@ -1020,31 +1154,36 @@ function renderScatter(){
   const W=1100,H=340,L=64,R=20,T=18,B=48;
   const xm=niceMax(Math.max(...pts.map(p=>p.x))),ym=niceMax(Math.max(...pts.map(p=>p.y)));
   const px=v=>L+(v/xm)*(W-L-R), py=v=>H-B-(v/ym)*(H-T-B);
+  const S=SKIN();
   let g='';
   for(let i=0;i<=5;i++){
     const xv=xm*i/5,yv=ym*i/5;
-    g+='<line x1="'+px(xv)+'" y1="'+T+'" x2="'+px(xv)+'" y2="'+(H-B)+'" stroke="#e6dcc0"/>'+
-       '<text x="'+px(xv)+'" y="'+(H-B+18)+'" text-anchor="middle" font-size="11" fill="#9a8a6a">'+
+    g+='<line x1="'+px(xv)+'" y1="'+T+'" x2="'+px(xv)+'" y2="'+(H-B)+'" stroke="'+S.grid+'"/>'+
+       '<text x="'+px(xv)+'" y="'+(H-B+18)+'" text-anchor="middle" font-size="11" '+
+       'font-family="'+S.font+'" fill="'+S.dim+'">'+
        (+xv.toFixed(xm<10?2:0))+'</text>'+
-       '<line x1="'+L+'" y1="'+py(yv)+'" x2="'+(W-R)+'" y2="'+py(yv)+'" stroke="#e6dcc0"/>'+
-       '<text x="'+(L-8)+'" y="'+(py(yv)+4)+'" text-anchor="end" font-size="11" fill="#9a8a6a">'+
+       '<line x1="'+L+'" y1="'+py(yv)+'" x2="'+(W-R)+'" y2="'+py(yv)+'" stroke="'+S.grid+'"/>'+
+       '<text x="'+(L-8)+'" y="'+(py(yv)+4)+'" text-anchor="end" font-size="11" '+
+       'font-family="'+S.font+'" fill="'+S.dim+'">'+
        (+yv.toFixed(ym<10?1:0))+'</text>';
   }
   const dots=pts.map(p=>{
     const c=cols[p.q.model||'?'];
     return '<g class="dot" data-n="'+p.n+'">'+
       '<circle cx="'+px(p.x)+'" cy="'+py(p.y)+'" r="7" fill="'+c+'" fill-opacity=".75" stroke="'+c+'"/>'+
-      '<text x="'+px(p.x)+'" y="'+(py(p.y)-12)+'" text-anchor="middle" font-size="10" fill="#6b5b3a">'+p.n+'</text>'+
+      '<text x="'+px(p.x)+'" y="'+(py(p.y)-12)+'" text-anchor="middle" font-size="10" '+
+      'font-family="'+S.font+'" fill="'+S.label+'">'+p.n+'</text>'+
       '<title>'+esc('#'+p.n+'  '+(p.q.text||'(not transcribed)')+'\\n'+(p.q.model||'?')+
         '\\n'+fmtE(p.q.above_idle)+'  ·  '+p.y.toFixed(1)+' s')+'</title></g>';
   }).join('');
   const legend=Object.keys(cols).map(k=>
     '<span class="sw" style="background:'+cols[k]+'"></span>'+esc(k)).join(' &nbsp; ');
   box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;'+
-    'background:#fffdf5;border:1px solid #c9b98a;border-radius:10px">'+g+
-    '<line x1="'+L+'" y1="'+T+'" x2="'+L+'" y2="'+(H-B)+'" stroke="#c9b98a"/>'+
-    '<line x1="'+L+'" y1="'+(H-B)+'" x2="'+(W-R)+'" y2="'+(H-B)+'" stroke="#c9b98a"/>'+
-    '<text x="'+((L+W-R)/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="12" fill="#6b5b3a">'+
+    'background:'+S.bg+';border:1px solid '+S.edge+';border-radius:'+S.radius+'">'+g+
+    '<line x1="'+L+'" y1="'+T+'" x2="'+L+'" y2="'+(H-B)+'" stroke="'+S.axis+'"/>'+
+    '<line x1="'+L+'" y1="'+(H-B)+'" x2="'+(W-R)+'" y2="'+(H-B)+'" stroke="'+S.axis+'"/>'+
+    '<text x="'+((L+W-R)/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="12" '+
+    'font-family="'+S.font+'" fill="'+S.label+'">'+
     'cost of question ('+U().lbl+')</text>'+
     '<text transform="translate(16,'+((T+H-B)/2)+') rotate(-90)" text-anchor="middle" '+
     'font-size="12" fill="#6b5b3a">duration (seconds)</text>'+
@@ -1219,6 +1358,45 @@ try{startTab=localStorage.getItem('solarbot-tab')||'live';}catch(e){}
 if(!document.getElementById('tab-'+startTab)) startTab='live';
 showTab(startTab);
 models();poll();qlog();files();unitNote();
+$('face').onclick=stepFace;
+$('face').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();stepFace();}};
+paintFace();
+setInterval(()=>{faceStep++;paintFace();},420);
+/* ---- the skin switch -------------------------------------------------
+   Paper is on unless you turn it off, so the new look is what you see and one
+   click puts the old one back beside it for comparison. */
+function paintSkin(){
+  const on=localStorage.getItem('skin')!=='plain';
+  document.documentElement.classList.toggle('paper',on);
+  $('skin').textContent=on?'skin: paper':'skin: original';
+  paintPhaseKey();
+}
+/* One swatch per phase, in the colours the graph will actually use. Without
+   this you cannot see the colours at all until the bot has run a question. */
+function paintPhaseKey(){
+  const p=isPaper();
+  const seen=new Set();
+  let h='';
+  for(const k of ['listening','detecting','asr','answer']){
+    const e=PH[k]; if(!e||!e.n||seen.has(e.n)) continue;
+    seen.add(e.n);
+    h+='<span><span class="sw" style="background:'+(p?e.pc:e.c)+'"></span>'+e.n+'</span>';
+  }
+  $('phasekey').innerHTML=h+'<span style="opacity:.6">shown on the graph while the bot is working</span>';
+}
+$('skin').onclick=()=>{
+  localStorage.setItem('skin',localStorage.getItem('skin')==='plain'?'paper':'plain');
+  paintSkin();draw();
+};
+paintSkin();
+/* what this page cost to load, stated the way her site states it */
+addEventListener('load',()=>{
+  try{
+    let b=(performance.getEntriesByType('navigation')[0]||{}).transferSize||0;
+    for(const r of performance.getEntriesByType('resource')) b+=r.transferSize||0;
+    if(b) $('pagecost').textContent='this page: '+(b/1024).toFixed(1)+' kB';
+  }catch(e){}
+});
 setInterval(poll,1000);setInterval(qlog,2000);setInterval(files,30000);
 </script>
 """
@@ -1399,6 +1577,14 @@ battery is somewhat higher.</p>
               items or "<p class='note'>No questions recorded yet.</p>")
 
 
+# The five state drawings, the same ones the bot shows on its own screen.
+# They live in faces/<state>/<0-2>.png next to this script. Serving them is the
+# only file serving this program does, so the path is checked against a fixed
+# list rather than being resolved against the filesystem.
+FACE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "faces")
+FACE_STATES = ("idle", "listening", "detecting", "recognizing", "answering")
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1415,6 +1601,23 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0].rstrip("/") or "/"
         if path == "/":
             return self._send(200, PAGE, "text/html; charset=utf-8")
+        if path.startswith("/faces/"):
+            parts = path[len("/faces/"):].split("/")
+            if (len(parts) != 2 or parts[0] not in FACE_STATES
+                    or parts[1] not in ("0.png", "1.png", "2.png")):
+                return self._send(404, b"no", "text/plain")
+            try:
+                with open(os.path.join(FACE_DIR, parts[0], parts[1]), "rb") as fh:
+                    body = fh.read()
+            except OSError:
+                return self._send(404, b"no", "text/plain")
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            # they never change, so let the browser keep them for a day
+            self.send_header("Cache-Control", "max-age=86400")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
         if path == "/api/samples":
             with samples_lock:
                 rows = [[round(t, 3), round(w, 4), round(c, 4), round(p, 4)]
