@@ -891,6 +891,7 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div class="row" style="align-items:center;gap:10px;margin-bottom:10px">
   <label>Day <select id="day"></select></label>
   <span class="key" id="daynote"></span>
+  <span class="key" id="dayfile" style="margin-left:auto"></span>
 </div>
 <canvas id="hc" width="1200" height="380"></canvas>
 <div class="key">A whole day at once, so you can compare one day with another. Each
@@ -934,10 +935,7 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 </div>
 <div id="compare"></div>
 </details>
-<details id="rawbox">
-<summary>Raw data</summary>
-<div class="key" id="files"></div>
-</details>
+<div class="key" id="qfiles"></div>
 </section>
 
 <section id="tab-calib" class="panel" hidden>
@@ -1396,19 +1394,35 @@ async function qlog(){
 }
 const qs=()=>'unit='+encodeURIComponent($('unit').value)+
              '&panel='+encodeURIComponent($('panel').value||'5');
+/* The raw files, kept as a lookup rather than printed as a list.
+   A list of every file ever written is a dump, not an offer: it sat on the
+   questions tab naming days you were not looking at. The same links are more
+   use attached to the thing they belong to, so the day you have open on the
+   history tab offers its own csv, and the questions table offers the questions. */
+let fileMap={}, fileDir='';
 async function files(){
   try{
-    const r=await fetch('api/files');const j=await r.json();
-    let h='';
-    if(j.files.length){
-      h='<b>Raw data:</b> '+j.files.map(f=>'<a href="download/'+encodeURIComponent(f.name)+
-         '">'+esc(f.name)+'</a> ('+f.kb+' kB)').join(' &middot; ')+
-         '<br><span style="opacity:.8">questions.jsonl is the same questions with every field kept; '+
-         'power-DATE.csv is one row per second of total and cpu watts.</span><br>';
-    }
-    h+='<span style="opacity:.8">Stored on the Pi in '+esc(j.dir)+'</span>';
-    $('files').innerHTML=h;
+    const j=await (await fetch('api/files')).json();
+    fileMap={}; (j.files||[]).forEach(f=>{ fileMap[f.name]=f.kb; });
+    fileDir=j.dir||'';
   }catch(e){}
+  paintQFiles(); paintDayFile();
+}
+function paintQFiles(){
+  const el=$('qfiles'); if(!el) return;
+  const kb=fileMap['questions.jsonl'];
+  el.innerHTML='Download these questions as '+
+    '<a href="download/questions.csv" download>csv</a> for a spreadsheet, or as '+
+    '<a href="download/questions.jsonl" download>jsonl</a> with every field kept'+
+    (kb?' ('+kb+' kB)':'')+'.';
+}
+function paintDayFile(){
+  const el=$('dayfile'); if(!el) return;
+  const d=$('day')?$('day').value:'';
+  const name='power-'+d+'.csv', kb=fileMap[name];
+  if(!d||!kb){ el.textContent=''; return; }
+  el.innerHTML='<a href="download/'+encodeURIComponent(name)+'" download>download this day</a> '+
+    '<span style="opacity:.7">('+kb+' kB, one row per second)</span>';
 }
 // The Report tab shows the finished document inline, so you can read it before
 // deciding to hand it over.
@@ -1505,6 +1519,7 @@ async function loadDay(){
   try{
     hist=await (await fetch('api/history?day='+encodeURIComponent(d))).json();
   }catch(e){ hist=null; }
+  paintDayFile();
   showDay();
 }
 function showDay(){
