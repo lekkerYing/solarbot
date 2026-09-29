@@ -788,6 +788,10 @@ PAGE = """<!doctype html>
    background-position:right 13px center,right 8px center;
    background-size:5px 5px,5px 5px;background-repeat:no-repeat}
  html.paper select:focus{outline:1px solid #000;outline-offset:1px}
+ /* The list that drops open is drawn separately from the button, so it stayed
+    the browser's own white until told otherwise. */
+ html.paper select option,html.paper select optgroup{background:#fff5d1;color:#000}
+ html.paper select option:checked{background:#000;color:#fff5d1}
  html.paper .sw{border-radius:0}
  /* The bands on the live graph only appear once the bot has actually done
     something, so this states what the colours mean even when it is asleep. */
@@ -889,9 +893,15 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
   <span class="key" id="daynote"></span>
 </div>
 <canvas id="hc" width="1200" height="380"></canvas>
-<div class="key">Averaged to the minute, with the peak of each minute behind it.
- Gaps are left empty on purpose: that is the bot being off, or the logger not
- running, and it is worth seeing.</div>
+<div class="key">A whole day at once, so you can compare one day with another. Each
+ minute of the log becomes one point, and the three lines are:
+ <b>peak</b>, the busiest single second in that minute, faint and behind the rest;
+ <b>total</b>, the average of everything the Pi drew that minute;
+ <b>cpu</b>, the part of that average spent on the processor alone, in blue.
+ The gap between total and cpu is everything that is not the processor: the
+ screen, the microphone, the board itself.
+ Gaps in the lines are left empty on purpose \u2014 that is the bot switched off,
+ and a day with holes in it is worth being able to see.</div>
 <div class="row" style="margin-top:12px">
   <div class="card"><div class="lbl">logged</div><div class="big"><span id="hcov">-</span></div></div>
   <div class="card"><div class="lbl">energy that day</div><div class="big"><span id="hwh">-</span> Wh</div></div>
@@ -902,6 +912,10 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 </section>
 
 <section id="tab-static" class="panel" hidden>
+<div class="row" style="align-items:center;gap:10px;margin-bottom:14px">
+  <label>Day <select id="qday"></select></label>
+  <span class="key" id="qdaynote"></span>
+</div>
 <h2>Cost against duration</h2>
 <div class="key">One dot per question: how long it took against what it cost. The numbers match the list
   below. Hover a dot to see the question.</div>
@@ -920,7 +934,10 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 </div>
 <div id="compare"></div>
 </details>
+<details id="rawbox">
+<summary>Raw data</summary>
 <div class="key" id="files"></div>
+</details>
 </section>
 
 <section id="tab-calib" class="panel" hidden>
@@ -1205,6 +1222,32 @@ function fmtT(x){
   return Math.floor(x/3600)+' h '+String(Math.floor(x%3600/60)).padStart(2,'0')+' m';
 }
 let lastQ=[];
+/* Which day the static tab is showing. Everything on that tab reads through
+   shownQ(), so the plot, the table and the cloud comparison can never end up
+   showing different sets of questions. */
+const dayKey=t=>{
+  const d=new Date(t*1000);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+
+         '-'+String(d.getDate()).padStart(2,'0');
+};
+function shownQ(){
+  const d=$('qday')?$('qday').value:'';
+  return (!d||d==='all')?lastQ:lastQ.filter(q=>dayKey(q.t)===d);
+}
+function paintQDays(){
+  const sel=$('qday'); if(!sel) return;
+  const had=sel.value;
+  const days=[...new Set(lastQ.map(q=>dayKey(q.t)))].sort().reverse();
+  sel.innerHTML='<option value="all">all days</option>'+
+    days.map(d=>'<option>'+d+'</option>').join('');
+  /* Default to the newest day rather than everything: with months of questions
+     "all" is a wall, and the day you just tested is what you came to look at. */
+  sel.value=(had&&[...sel.options].some(o=>o.value===had))?had:(days[0]||'all');
+  const n=shownQ().length;
+  $('qdaynote').textContent=n+' question'+(n===1?'':'s')+
+    (sel.value==='all'?' in total':' that day')+
+    (days.length>1?' \u00b7 '+days.length+' days logged':'');
+}
 
 // Colours are assigned in the order models first appear, so a run with one
 // model stays plain and a comparison run separates itself.
@@ -1238,6 +1281,9 @@ function niceMax(v){
   return 10*p;
 }
 function renderScatter(){
+  /* The selected day only. Shadowing the global keeps one code path instead of
+     threading a parameter through everything below. */
+  const lastQ=shownQ();
   const box=$('scatter');
   if(!lastQ.length){box.innerHTML='<div class="key">Nothing to plot yet.</div>';return;}
   // Oldest first, so the numbers follow the order you asked them.
@@ -1283,6 +1329,7 @@ function renderScatter(){
     dots+'</svg><div class="key">'+legend+'</div>';
 }
 function renderQ(){
+  const lastQ=shownQ();          // the selected day only, as in renderScatter
   if(!lastQ.length){
     $('qlog').innerHTML='<div class="key">Nothing yet. Hold the button on the bot and ask something.</div>';
     return;
@@ -1343,7 +1390,7 @@ function renderQ(){
 async function qlog(){
   try{
     const r=await fetch('api/questions');const j=await r.json();
-    lastQ=j.questions;renderQ();renderScatter();paintPhaseBar();
+    lastQ=j.questions;paintQDays();renderQ();renderScatter();paintPhaseBar();
     if(!$('tab-report').hidden) loadReport();
   }catch(e){}
 }
@@ -1523,14 +1570,19 @@ function drawHist(){
     x.stroke();
   };
   const paper=isPaper();
-  line(3, paper?'rgba(0,0,0,.22)':'rgba(210,105,30,.30)', 1);
-  line(1, paper?'#000':'#6b5b3a', 1.6);
-  line(2, paper?'#162dab':'#3e6ebe', 1.2);
+  const cPeak=paper?'rgba(0,0,0,.30)':'rgba(210,105,30,.40)';
+  const cTot =paper?'#000':'#6b5b3a';
+  const cCpu =paper?'#162dab':'#3e6ebe';
+  line(3, cPeak, 1);              // the highest single second in each minute
+  line(1, cTot , 1.6);            // the average of that minute, everything
+  line(2, cCpu , 1.2);            // the average of that minute, cpu only
   x.strokeStyle=S.axis;x.lineWidth=1;
   x.beginPath();x.moveTo(L,T);x.lineTo(L,H-B);x.lineTo(W-R,H-B);x.stroke();
-  x.fillStyle=S.label;x.textAlign='left';x.font='11px '+S.font;
-  x.fillText('total W',L+6,T+12);
-  x.fillStyle=paper?'#162dab':'#3e6ebe';x.fillText('cpu W',L+64,T+12);
+  /* Three lines is two more than anyone guesses, so they name themselves. */
+  x.textAlign='left';x.font='11px '+S.font;
+  x.fillStyle=cPeak;x.fillText('peak W',L+6,T+12);
+  x.fillStyle=cTot ;x.fillText('total W',L+62,T+12);
+  x.fillStyle=cCpu ;x.fillText('cpu W',L+122,T+12);
 }
 $('day').onchange=loadDay;
 
@@ -1564,8 +1616,9 @@ function renderCompare(){
     'on this Pi for '+esc(cmp.bot_model||'the local model')+'. '+
     'The range is the estimate\u2019s own: ecocost does not know which chip, which data '+
     'centre or which grid answered, and says so.';
-  const rows=cmp.questions||[];
-  if(!rows.length){ box.innerHTML='<div class="key">Nothing to compare yet.</div>'; return; }
+  const dag=$('qday')?$('qday').value:'all';
+  const rows=(cmp.questions||[]).filter(r=>dag==='all'||dayKey(r.t)===dag);
+  if(!rows.length){ box.innerHTML='<div class="key">Nothing to compare on that day.</div>'; return; }
   const here=rows.reduce((s,r)=>s+(r.measured||0),0);
   const there=rows.reduce((s,r)=>s+(r.joules||0),0);
   const lo=rows.reduce((s,r)=>s+(r.min||0),0), hi=rows.reduce((s,r)=>s+(r.max||0),0);
@@ -1596,6 +1649,7 @@ function renderCompare(){
     }).join('')+'</table>';
 }
 $('cmodel').onchange=loadCompare;
+$('qday').onchange=()=>{ paintQDays();renderQ();renderScatter();renderCompare(); };
 $('cmpbox').ontoggle=()=>{ if($('cmpbox').open) loadCompare(); };
 
 const redraw=()=>{
