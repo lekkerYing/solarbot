@@ -912,12 +912,14 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
   that was loaded when it answered. Saved to disk, so restarts do not lose it.</div>
 <div id="qlog"></div>
 
-<h2 style="margin-top:34px">What if you had asked a cloud model?</h2>
+<details id="cmpbox">
+<summary>What if you had asked a cloud model?</summary>
 <div class="key" id="comparenote"></div>
 <div class="row" style="align-items:center;gap:10px;margin:10px 0 4px">
   <label>Compare with <select id="cmodel"></select></label>
 </div>
 <div id="compare"></div>
+</details>
 <div class="key" id="files"></div>
 </section>
 
@@ -1435,7 +1437,7 @@ function showTab(name){
   document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!=='tab-'+name));
   try{localStorage.setItem('solarbot-tab',name);}catch(e){}
   if(name==='report') loadReport();
-  if(name==='static') loadCompare();
+  if(name==='static' && $('cmpbox').open) loadCompare();
   if(name==='history'){ loadDays(); }
 }
 /* ---- history ----------------------------------------------------------
@@ -1594,6 +1596,7 @@ function renderCompare(){
     }).join('')+'</table>';
 }
 $('cmodel').onchange=loadCompare;
+$('cmpbox').ontoggle=()=>{ if($('cmpbox').open) loadCompare(); };
 
 const redraw=()=>{
   unitNote();renderQ();renderScatter();renderAsk();poll();
