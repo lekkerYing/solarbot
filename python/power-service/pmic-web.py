@@ -587,7 +587,7 @@ PAGE = """<!doctype html>
    border-radius:9px 9px 0 0;padding:8px 18px;cursor:pointer;opacity:.6;margin-bottom:-1px}
  .tabs button:hover{opacity:.9}
  .tabs button.on{background:#fffdf5;border-color:var(--line);opacity:1;font-weight:600}
- /* Left: the two views. Right: the tools. */
+ /* Left: what is happening now. Right: everything you look back at. */
  .tabs button.apart{margin-left:auto}
  .panel{padding-top:20px}
  .panel[hidden]{display:none}
@@ -749,8 +749,15 @@ PAGE = """<!doctype html>
  html.paper .sw{border-radius:0}
  /* The bands on the live graph only appear once the bot has actually done
     something, so this states what the colours mean even when it is asleep. */
- .phasekey{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
- .phasekey .sw{width:16px;height:10px;border:1px solid rgba(0,0,0,.25)}
+ /* The same stacked bar the report uses, blown up to the width of the graph.
+    The bands on the graph only exist after the bot has answered something, so
+    this doubles as the key for them while it is asleep. */
+ .phasebar{margin-top:12px}
+ .phasebar .pbar{height:16px;width:100%;min-width:0;border-radius:4px}
+ html.paper .phasebar .pbar{border-radius:0;border:1px solid #000;background:none}
+ .phasebar .lbls{display:flex;gap:18px;flex-wrap:wrap;align-items:center;
+   font-size:12px;opacity:.75;margin-top:6px}
+ .phasebar .sw{width:16px;height:10px}
 </style>
 <header>
 <div class="mast">
@@ -771,8 +778,8 @@ PAGE = """<!doctype html>
 <nav class="tabs">
   <button data-tab="live">Live</button>
   <button data-tab="static">Static</button>
-  <button data-tab="history">History</button>
-  <button data-tab="report" class="apart">Report</button>
+  <button data-tab="history" class="apart">History</button>
+  <button data-tab="report">Report</button>
   <button data-tab="calib">Calibration</button>
 </nav>
 </header>
@@ -805,14 +812,10 @@ So the real drain on the battery is higher than the joules shown here, by an amo
 To get the true battery cost, either put a sensor in the battery lead, or run a calibration on the Calibration tab."></i></div>
 </div>
 <canvas id="c" width="1200" height="440"></canvas>
-<div class="key phasekey" id="phasekey"></div>
+<div class="phasebar" id="phasebar"></div>
 <div class="key"><span class="sw" style="background:#d2691e"></span>total used
   <span class="sw" style="background:#3a7d6c;margin-left:12px"></span>cpu only (VDD_CORE)
-  <span class="sw" style="background:#c9a227;margin-left:12px"></span>coming in from the panel
-  <span style="margin-left:16px">bot phases:</span>
-  <span class="sw" style="background:rgba(74,160,90,.55)"></span>listening
-  <span class="sw" style="background:rgba(62,110,190,.55);margin-left:8px"></span>transcribing
-  <span class="sw" style="background:rgba(210,105,30,.6);margin-left:8px"></span>answering</div>
+  <span class="sw" style="background:#c9a227;margin-left:12px"></span>coming in from the panel</div>
 
 <details id="askbox">
 <summary>Ask a question from here</summary>
@@ -926,6 +929,25 @@ function unitNote(){
 /* f: which of the five drawings belongs to this flow. The log calls the flows
    by their own names, while the drawings are named after what the bot puts on
    its screen, so the two vocabularies have to be tied together here. */
+/* Every phase colour in one place, so the bands on the graph, the bar under it
+   and the bars in the report can never drift apart again. Lighter than the old
+   set: at full strength those read as heavy blocks on cream rather than as a
+   key you can glance at. The paper column keeps the hues of her site but tinted
+   towards the background instead of sitting at full saturation. */
+const PHASE={
+  listening   :{c:'#7ecb92', p:'#5fbda6'},
+  detecting   :{c:'#b6e4c2', p:'#a6d8cb'},
+  transcribing:{c:'#84acea', p:'#8b95de'},
+  answering   :{c:'#f2ad72', p:'#f0897d'},
+  image       :{c:'#cba6e0', p:'#c2c2c2'}
+};
+const PHC=n=>((PHASE[n]||{})[isPaper()?'p':'c'])||'#cccccc';
+/* The same colour again, see-through, for the band painted behind the curve. */
+const PHBAND=(n,a)=>{
+  const h=PHC(n);
+  return 'rgba('+parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+
+         parseInt(h.slice(5,7),16)+','+a+')';
+};
 const PH={
   listening     :{n:'listening',    c:'rgba(74,160,90,.20)', t:'#2f6b3c', f:'listening',
                   pc:'rgba(0,105,81,.16)',   pt:'#006951'},
@@ -1033,11 +1055,13 @@ function draw(){
   const px=t=>(t-t0)/span*W, py=w=>H-B-(w/peak)*(H-B);
   const paper=document.documentElement.classList.contains('paper');
   for(let i=0;i<phases.length;i++){
-    const p=PH[phases[i][1]];if(!p||!p.c)continue;
+    const p=PH[phases[i][1]];if(!p||!p.n)continue;
     const a=Math.max(0,px(phases[i][0]));
     const b=i+1<phases.length?px(phases[i+1][0]):W;
     if(b<=a)continue;
-    x.fillStyle=paper?p.pc:p.c;x.fillRect(a,0,b-a,H);
+    /* detecting is the quiet sibling of listening and shares its colour, so it
+       is painted fainter to stay apart from it. */
+    x.fillStyle=PHBAND(p.n,p.n==='detecting'?0.17:0.32);x.fillRect(a,0,b-a,H);
     if(b-a>62&&p.n){x.fillStyle=paper?p.pt:p.t;
       x.font=paper?'12px "Courier New",Courier,monospace':'600 12px system-ui';
       x.fillText(p.n,a+6,17);}
@@ -1214,13 +1238,12 @@ function renderQ(){
     return;
   }
   // The three phases as one stacked bar, in the same colours as the live graph.
-  const PH_COL={listening:'#4aa05a',transcribing:'#3e6ebe',answering:'#d2691e'};
   const phBar=q=>{
     const p=q.phases,names=['listening','transcribing','answering'];
     const tot=Math.max(0.001,names.reduce((s,n)=>s+(p[n]||{}).seconds,0));
     const tt=names.map(n=>n+' '+(p[n]||{}).seconds.toFixed(1)+' s, '+fmtE((p[n]||{}).joules)).join('\\n');
     return '<div class="pbar" title="'+esc(tt)+'">'+names.map(n=>
-      '<span style="width:'+((p[n]||{}).seconds/tot*100).toFixed(1)+'%;background:'+PH_COL[n]+'"></span>'
+      '<span style="width:'+((p[n]||{}).seconds/tot*100).toFixed(1)+'%;background:'+PHC(n)+'"></span>'
     ).join('')+'</div>';
   };
   // Same numbering as the scatter plot: oldest question is 1.
@@ -1262,15 +1285,15 @@ function renderQ(){
     '</tr>').join('')+'</table>'+
     // Same key as under the live graph, so the bars read the same way.
     '<div class="key" style="margin-top:8px">phases:'+
-    '<span class="sw" style="background:'+PH_COL.listening+';margin-left:10px"></span>listening'+
-    '<span class="sw" style="background:'+PH_COL.transcribing+';margin-left:12px"></span>transcribing'+
-    '<span class="sw" style="background:'+PH_COL.answering+';margin-left:12px"></span>answering'+
+    '<span class="sw" style="background:'+PHC('listening')+';margin-left:10px"></span>listening'+
+    '<span class="sw" style="background:'+PHC('transcribing')+';margin-left:12px"></span>transcribing'+
+    '<span class="sw" style="background:'+PHC('answering')+';margin-left:12px"></span>answering'+
     '</div>';
 }
 async function qlog(){
   try{
     const r=await fetch('api/questions');const j=await r.json();
-    lastQ=j.questions;renderQ();renderScatter();
+    lastQ=j.questions;renderQ();renderScatter();paintPhaseBar();
     if(!$('tab-report').hidden) loadReport();
   }catch(e){}
 }
@@ -1323,10 +1346,9 @@ function loadReport(){
            '<td class="n"><b>'+fmtE(j/a.length)+'</b></td></tr>';
   }).join('');
 
-  const PH_COL={listening:'#4aa05a',transcribing:'#3e6ebe',answering:'#d2691e'};
   const cards=rows.map(q=>{
     const bars=['listening','transcribing','answering'].map(n=>
-      '<span><span class="sw" style="background:'+PH_COL[n]+'"></span>'+n+': '+
+      '<span><span class="sw" style="background:'+PHC(n)+'"></span>'+n+': '+
       (q.phases[n]||{}).seconds.toFixed(1)+' s, '+fmtE((q.phases[n]||{}).joules)+'</span>').join('');
     return '<div class="rp"><div><span class="when">'+esc(q.iso||'')+'</span>'+
       '<span class="tag">'+esc(q.model||'?')+'</span><span class="tag">'+esc(q.source||'?')+'</span>'+
@@ -1483,20 +1505,33 @@ function paintSkin(){
   const on=localStorage.getItem('skin')!=='plain';
   document.documentElement.classList.toggle('paper',on);
   $('skin').textContent=on?'skin: paper':'skin: original';
-  paintPhaseKey();
+  paintPhaseBar();
 }
-/* One swatch per phase, in the colours the graph will actually use. Without
-   this you cannot see the colours at all until the bot has run a question. */
-function paintPhaseKey(){
-  const p=isPaper();
-  const seen=new Set();
-  let h='';
-  for(const k of ['listening','detecting','asr','answer']){
-    const e=PH[k]; if(!e||!e.n||seen.has(e.n)) continue;
-    seen.add(e.n);
-    h+='<span><span class="sw" style="background:'+(p?e.pc:e.c)+'"></span>'+e.n+'</span>';
-  }
-  $('phasekey').innerHTML=h+'<span style="opacity:.6">shown on the graph while the bot is working</span>';
+/* The bar Ambika liked in the report, put under the live graph as well.
+   Once the bot has answered something it shows how that question split across
+   the phases; before that it stands in as the key for the bands on the graph,
+   drawn in equal parts and faded so it does not claim to be a measurement. */
+function paintPhaseBar(){
+  const box=$('phasebar'); if(!box) return;
+  const names=['listening','transcribing','answering'];
+  let q=null;
+  for(const r of (lastQ||[])) if(!q||r.t>q.t) q=r;
+  const secs=names.map(n=>q?(((q.phases||{})[n]||{}).seconds||0):0);
+  const tot=secs.reduce((a,b)=>a+b,0);
+  const live=tot>0.05;
+  const w=names.map((n,i)=>live?secs[i]/tot*100:100/names.length);
+  const tip=names.map((n,i)=>n+' '+secs[i].toFixed(1)+' s').join(' \u00b7 ');
+  box.innerHTML=
+    '<div class="pbar"'+(live?' title="'+esc(tip)+'"':' style="opacity:.42"')+'>'+
+    names.map((n,i)=>'<span style="width:'+w[i].toFixed(1)+'%;background:'+
+      PHC(n)+'"></span>').join('')+'</div>'+
+    '<div class="lbls">'+
+    names.map((n,i)=>'<span><span class="sw" style="background:'+PHC(n)+'"></span>'+n+
+      (live?' <b>'+secs[i].toFixed(1)+' s</b>':'')+'</span>').join('')+
+    '<span style="opacity:.6;margin-left:auto">'+
+    (live?'the last question, phase by phase'
+         :'no question logged yet \u2014 these are the colours the graph uses')+
+    '</span></div>';
 }
 $('skin').onclick=()=>{
   localStorage.setItem('skin',localStorage.getItem('skin')==='plain'?'paper':'plain');
