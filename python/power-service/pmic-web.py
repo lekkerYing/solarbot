@@ -761,6 +761,10 @@ PAGE = """<!doctype html>
     joins the machine voice. */
  html.paper details{background:none;border:0;border-top:1px solid #000;
    border-radius:0;padding:12px 0 0;margin-top:30px}
+ /* The questions download sits right above this panel's rule but belongs to the
+    table further up, so the gap a panel usually gets would open in the wrong
+    place: between a line and the thing it is about. */
+ #cmpbox{margin-top:10px}
  html.paper summary{font-family:"Courier New",Courier,monospace;
    font-weight:normal;text-transform:uppercase;letter-spacing:.09em;font-size:12px}
  html.paper summary::marker{color:#828282}
@@ -957,6 +961,7 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <section id="tab-report" class="panel" hidden>
 <div class="row" style="align-items:center;margin-bottom:6px">
   <h2 style="margin:0">Report</h2>
+  <label style="margin-left:18px">Day <select id="rday"></select></label>
   <div style="margin-left:auto"><a id="dl" class="btn" download="solarbot-energy-report.html">Download</a></div>
 </div>
 <div id="reportbody"></div>
@@ -1393,7 +1398,14 @@ async function qlog(){
   }catch(e){}
 }
 const qs=()=>'unit='+encodeURIComponent($('unit').value)+
-             '&panel='+encodeURIComponent($('panel').value||'5');
+             '&panel='+encodeURIComponent($('panel').value||'5')+
+             '&day='+encodeURIComponent(reportDay());
+/* An empty day means every day, which keeps the old behaviour as the "all"
+   option rather than as a special case threaded through everything. */
+const reportDay=()=>{
+  const v=$('rday')?$('rday').value:'';
+  return (!v||v==='all')?'':v;
+};
 /* The raw files, kept as a lookup rather than printed as a list.
    A list of every file ever written is a dump, not an offer: it sat on the
    questions tab naming days you were not looking at. The same links are more
@@ -1429,12 +1441,30 @@ function paintDayFile(){
 // The report, rendered straight into the page so it scrolls with everything
 // else. The downloadable file is built separately on the server, from the same
 // numbers, so the two stay in step.
+function paintRDays(){
+  const sel=$('rday'); if(!sel) return;
+  const had=sel.value;
+  const days=[...new Set(lastQ.map(q=>dayKey(q.t)))].sort().reverse();
+  sel.innerHTML='<option value="all">all days</option>'+
+    days.map(d=>'<option>'+d+'</option>').join('');
+  /* The whole set is the honest default here: a report is the thing you hand
+     over, and handing over one day without saying so would be a smaller claim
+     than it looks. Pick a day deliberately if you want one. */
+  sel.value=(had&&[...sel.options].some(o=>o.value===had))?had:'all';
+}
 function loadReport(){
+  paintRDays();
+  const day=reportDay();
   $('dl').href='download/report.html?'+qs();
+  $('dl').setAttribute('download',
+    'solarbot-energy-report'+(day?'-'+day:'')+'.html');
   const box=$('reportbody');
-  if(!lastQ.length){box.innerHTML='<div class="key">No questions recorded yet. '+
-    'Hold the button on the bot and ask something.</div>';return;}
-  const rows=lastQ.slice().sort((a,b)=>b.t-a.t);
+  const shown=day?lastQ.filter(q=>dayKey(q.t)===day):lastQ;
+  if(!shown.length){box.innerHTML='<div class="key">'+(day
+    ?'Nothing was logged on '+day+'.'
+    :'No questions recorded yet. Hold the button on the bot and ask something.')+
+    '</div>';return;}
+  const rows=shown.slice().sort((a,b)=>b.t-a.t);
   const group=(key)=>{
     const by={};rows.forEach(q=>{const k=q[key]||'unknown';(by[k]=by[k]||[]).push(q);});
     return by;
@@ -1665,6 +1695,7 @@ function renderCompare(){
 }
 $('cmodel').onchange=loadCompare;
 $('qday').onchange=()=>{ paintQDays();renderQ();renderScatter();renderCompare(); };
+$('rday').onchange=loadReport;
 $('cmpbox').ontoggle=()=>{ if($('cmpbox').open) loadCompare(); };
 
 const redraw=()=>{
@@ -1735,7 +1766,7 @@ setInterval(poll,1000);setInterval(qlog,2000);setInterval(files,30000);
 """
 
 
-def build_report(rows, unit="J", panel="5", toolbar=False):
+def build_report(rows, unit="J", panel="5", toolbar=False, day=""):
     """A standalone page you can open, read, hand over, or print to PDF.
 
     The spreadsheet export is for analysis. This is for showing someone.
@@ -1787,10 +1818,12 @@ def build_report(rows, unit="J", panel="5", toolbar=False):
 
     bar = ""
     if toolbar:
-        qs = "unit=%s&panel=%s" % (urllib.parse.quote(unit), urllib.parse.quote(str(panel)))
+        qs = "unit=%s&panel=%s&day=%s" % (urllib.parse.quote(unit),
+                                          urllib.parse.quote(str(panel)),
+                                          urllib.parse.quote(day))
         units = " ".join(
-            '<a href="/report?unit=%s&panel=%s"%s>%s</a>'
-            % (u, urllib.parse.quote(str(panel)),
+            '<a href="/report?unit=%s&panel=%s&day=%s"%s>%s</a>'
+            % (u, urllib.parse.quote(str(panel)), urllib.parse.quote(day),
                ' class="on"' if u == unit else "", name)
             for u, name in (("J", "joules"), ("mWh", "mWh"), ("mAh", "mAh"),
                             ("pct", "% of charge"), ("sun", "sun seconds")))
@@ -1877,7 +1910,7 @@ def build_report(rows, unit="J", panel="5", toolbar=False):
 <main>
 %s
 <h1>Solarbot energy report</h1>
-<div class="sub">Generated %s &middot; %d question%s logged &middot; energy shown in %s</div>
+<div class="sub">%s &middot; generated %s &middot; %d question%s &middot; energy shown in %s</div>
 
 <h2>Totals</h2>
 <p class="note"><b>%s</b> spent answering across all questions, costing <b>%s</b> in total
@@ -1902,7 +1935,8 @@ leaves what the thinking actually cost.</p>
 internal rails: processor, memory, wifi. It does not include the Whisplay HAT's screen and
 speaker, anything on USB, or the PiSugar's conversion losses, so the real drain on the
 battery is somewhat higher.</p>
-</main>""" % (bar, time.strftime("%Y-%m-%d %H:%M"), len(rows),
+</main>""" % (bar, ("All days" if not day else day),
+              time.strftime("%Y-%m-%d %H:%M"), len(rows),
               "" if len(rows) == 1 else "s", esc(lbl),
               fmt_t(all_t), e(all_j),
               summary or "<tr><td colspan=6>nothing logged yet</td></tr>",
@@ -2148,9 +2182,16 @@ class Handler(BaseHTTPRequestHandler):
                     q[k] = urllib.parse.unquote_plus(v)
             with questions_lock:
                 rows = list(questions)
+            # An empty day means every day, which is what the report always was.
+            day = q.get("day", "")
+            if day:
+                rows = [r for r in rows
+                        if time.strftime("%Y-%m-%d",
+                                         time.localtime(r.get("t", 0))) == day]
             return self._send(200, build_report(rows, q.get("unit", "J"),
                                                 q.get("panel", "5"),
-                                                toolbar=(path == "/report")),
+                                                toolbar=(path == "/report"),
+                                                day=day),
                               "text/html; charset=utf-8")
         if path == "/download/questions.csv":
             with questions_lock:
