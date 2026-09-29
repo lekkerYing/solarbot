@@ -771,6 +771,7 @@ PAGE = """<!doctype html>
 <nav class="tabs">
   <button data-tab="live">Live</button>
   <button data-tab="static">Static</button>
+  <button data-tab="history">History</button>
   <button data-tab="report" class="apart">Report</button>
   <button data-tab="calib">Calibration</button>
 </nav>
@@ -836,6 +837,24 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div id="out"></div>
 </details>
 
+</section>
+
+<section id="tab-history" class="panel" hidden>
+<div class="row" style="align-items:center;gap:10px;margin-bottom:10px">
+  <label>Day <select id="day"></select></label>
+  <span class="key" id="daynote"></span>
+</div>
+<canvas id="hc" width="1200" height="380"></canvas>
+<div class="key">Averaged to the minute, with the peak of each minute behind it.
+ Gaps are left empty on purpose: that is the bot being off, or the logger not
+ running, and it is worth seeing.</div>
+<div class="row" style="margin-top:12px">
+  <div class="card"><div class="lbl">logged</div><div class="big"><span id="hcov">-</span></div></div>
+  <div class="card"><div class="lbl">energy that day</div><div class="big"><span id="hwh">-</span> Wh</div></div>
+  <div class="card"><div class="lbl">average</div><div class="big"><span id="hmean">-</span> W</div></div>
+  <div class="card"><div class="lbl">peak</div><div class="big"><span id="hpeak">-</span> W</div></div>
+  <div class="card"><div class="lbl">battery</div><div class="big"><span id="hbat">-</span></div></div>
+</div>
 </section>
 
 <section id="tab-static" class="panel" hidden>
@@ -1346,7 +1365,102 @@ function showTab(name){
   document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!=='tab-'+name));
   try{localStorage.setItem('solarbot-tab',name);}catch(e){}
   if(name==='report') loadReport();
+  if(name==='history'){ loadDays(); }
 }
+/* ---- history ----------------------------------------------------------
+   The live graph only ever holds the last few minutes. Everything older is
+   on disk and was, until now, only downloadable. This draws a whole day. */
+let hist=null;
+async function loadDays(){
+  try{
+    const j=await (await fetch('api/days')).json();
+    const sel=$('day'), had=sel.value;
+    sel.innerHTML=(j.days||[]).map(d=>'<option>'+d+'</option>').join('');
+    if(had&&(j.days||[]).includes(had)) sel.value=had;
+    if(sel.value) loadDay();
+  }catch(e){}
+}
+async function loadDay(){
+  const d=$('day').value; if(!d) return;
+  try{
+    hist=await (await fetch('api/history?day='+encodeURIComponent(d))).json();
+  }catch(e){ hist=null; }
+  showDay();
+}
+function showDay(){
+  const h=hist;
+  if(!h||h.error||!h.points||!h.points.length){
+    $('daynote').textContent=h&&h.error?h.error:'nothing logged that day';
+    $('hcov').textContent=$('hwh').textContent=$('hmean').textContent=
+      $('hpeak').textContent=$('hbat').textContent='-';
+    drawHist(); return;
+  }
+  const hrs=h.seconds/3600;
+  $('hcov').textContent=hrs>=1?hrs.toFixed(1)+' h':Math.round(h.seconds/60)+' min';
+  $('hwh').textContent=h.wh.toFixed(2);
+  $('hmean').textContent=h.mean.toFixed(2);
+  $('hpeak').textContent=h.peak.toFixed(2);
+  const b=h.battery||{};
+  $('hbat').textContent=(b.first==null||b.last==null)?'-'
+    :(b.first.toFixed(0)+'% \u2192 '+b.last.toFixed(0)+'%');
+  $('daynote').textContent=(h.seconds/864).toFixed(0)+'% of the day covered';
+  drawHist();
+}
+function drawHist(){
+  const c=$('hc'); if(!c) return;
+  const x=c.getContext('2d'), W=c.width, H=c.height, L=54, R=14, T=12, B=30;
+  const S=SKIN();
+  x.clearRect(0,0,W,H);
+  if(S.bg!=='none'){x.fillStyle=S.bg;x.fillRect(0,0,W,H);}
+  const h=hist;
+  if(!h||!h.points||!h.points.length){
+    x.fillStyle=S.dim;x.font='13px '+S.font;
+    x.fillText('nothing logged that day',L,H/2); return;
+  }
+  /* Always the whole day, so two days can be compared by eye and a short
+     stretch of logging looks as short as it was. */
+  const t0=h.points[0][0]-(h.points[0][0]%86400)+(new Date(h.day+'T00:00:00')).getTimezoneOffset()*60;
+  const day0=Math.min(h.points[0][0], t0), day1=day0+86400;
+  const peak=Math.max(1,Math.max.apply(null,h.points.map(p=>p[3])))*1.1;
+  const px=t=>L+(t-day0)/86400*(W-L-R), py=w=>H-B-(w/peak)*(H-T-B);
+  x.strokeStyle=S.grid;x.lineWidth=1;x.fillStyle=S.dim;x.font='11px '+S.font;
+  for(let hh=0;hh<=24;hh+=3){
+    const xx=px(day0+hh*3600);
+    x.beginPath();x.moveTo(xx,T);x.lineTo(xx,H-B);x.stroke();
+    x.textAlign='center';x.fillText((hh<10?'0':'')+hh+':00',xx,H-B+16);
+  }
+  x.textAlign='right';
+  for(let i=0;i<=4;i++){
+    const w=peak*i/4,yy=py(w);
+    x.beginPath();x.moveTo(L,yy);x.lineTo(W-R,yy);x.stroke();
+    x.fillText(w.toFixed(1),L-6,yy+4);
+  }
+  /* The per-minute peak sits behind the mean, so a burst that lasted seconds
+     is still visible instead of being averaged into nothing. */
+  const gap=(a,b)=>b-a>120;   // more than two minutes apart is a gap
+  const line=(idx,style,width)=>{
+    x.strokeStyle=style;x.lineWidth=width;x.beginPath();
+    let pen=false;
+    for(let i=0;i<h.points.length;i++){
+      const p=h.points[i];
+      if(pen&&gap(h.points[i-1][0],p[0])){x.stroke();x.beginPath();pen=false;}
+      const X=px(p[0]),Y=py(p[idx]);
+      if(pen) x.lineTo(X,Y); else {x.moveTo(X,Y);pen=true;}
+    }
+    x.stroke();
+  };
+  const paper=isPaper();
+  line(3, paper?'rgba(0,0,0,.22)':'rgba(210,105,30,.30)', 1);
+  line(1, paper?'#000':'#6b5b3a', 1.6);
+  line(2, paper?'#162dab':'#3e6ebe', 1.2);
+  x.strokeStyle=S.axis;x.lineWidth=1;
+  x.beginPath();x.moveTo(L,T);x.lineTo(L,H-B);x.lineTo(W-R,H-B);x.stroke();
+  x.fillStyle=S.label;x.textAlign='left';x.font='11px '+S.font;
+  x.fillText('total W',L+6,T+12);
+  x.fillStyle=paper?'#162dab':'#3e6ebe';x.fillText('cpu W',L+64,T+12);
+}
+$('day').onchange=loadDay;
+
 const redraw=()=>{
   unitNote();renderQ();renderScatter();renderAsk();poll();
   if(!$('tab-report').hidden) loadReport();
@@ -1386,7 +1500,7 @@ function paintPhaseKey(){
 }
 $('skin').onclick=()=>{
   localStorage.setItem('skin',localStorage.getItem('skin')==='plain'?'paper':'plain');
-  paintSkin();draw();
+  paintSkin();draw();drawHist();
 };
 paintSkin();
 /* what this page cost to load, stated the way her site states it */
@@ -1585,6 +1699,81 @@ FACE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "faces")
 FACE_STATES = ("idle", "listening", "detecting", "recognizing", "answering")
 
 
+def read_day(day):
+    """One day of the log, averaged to the minute.
+
+    A day is 86400 rows, which is four megabytes down the wire and far more
+    detail than anyone reads on a chart a thousand pixels wide. Averaging to
+    the minute gives 1440 points, and the peak within each minute is kept
+    alongside the mean so a short burst is still visible rather than smoothed
+    away.
+
+    Minutes with no reading are left out entirely instead of being filled in.
+    That matters here: a gap means the bot was off or the logger was not
+    running, and that is exactly the thing worth seeing.
+    """
+    if not day or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        return {"day": day, "error": "no such day"}
+    path = os.path.join(DATA_DIR, "power-%s.csv" % day)
+    if not os.path.exists(path):
+        return {"day": day, "error": "no such day"}
+
+    buckets = {}
+    joules = 0.0
+    seconds = 0
+    peak = 0.0
+    bat_first = bat_last = None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                parts = line.rstrip("\n").split(",")
+                if len(parts) < 4 or parts[0] == "time":
+                    continue
+                try:
+                    t = int(float(parts[1]))
+                    total = float(parts[2])
+                    cpu = float(parts[3])
+                except ValueError:
+                    continue
+                # One row is one second, so watts and joules are the same number.
+                joules += total
+                seconds += 1
+                if total > peak:
+                    peak = total
+                try:
+                    lvl = float(parts[4])
+                    if bat_first is None:
+                        bat_first = lvl
+                    bat_last = lvl
+                except (IndexError, ValueError):
+                    pass
+                m = t - (t % 60)
+                b = buckets.get(m)
+                if b is None:
+                    buckets[m] = [total, cpu, total, 1]   # sum, cpusum, max, n
+                else:
+                    b[0] += total
+                    b[1] += cpu
+                    if total > b[2]:
+                        b[2] = total
+                    b[3] += 1
+    except OSError as e:
+        return {"day": day, "error": str(e)}
+
+    points = [[m, round(v[0] / v[3], 3), round(v[1] / v[3], 3), round(v[2], 3)]
+              for m, v in sorted(buckets.items())]
+    return {
+        "day": day,
+        "points": points,                      # minute, mean W, mean cpu W, peak W
+        "seconds": seconds,                    # how much of the day was logged
+        "joules": round(joules, 1),
+        "wh": round(joules / 3600.0, 3),
+        "mean": round(joules / seconds, 3) if seconds else 0,
+        "peak": round(peak, 3),
+        "battery": {"first": bat_first, "last": bat_last},
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1636,6 +1825,24 @@ class Handler(BaseHTTPRequestHandler):
                                                "battery": bat,
                                                "panel": pan,
                                                "session": session_report()}),
+                              "application/json")
+        if path == "/api/days":
+            # Which days there is anything to look at, newest first.
+            try:
+                names = sorted(os.listdir(DATA_DIR), reverse=True)
+            except OSError:
+                names = []
+            days = [n[6:-4] for n in names
+                    if n.startswith("power-") and n.endswith(".csv")]
+            return self._send(200, json.dumps({"days": days}),
+                              "application/json")
+        if path == "/api/history":
+            q = {}
+            if "?" in self.path:
+                for part in self.path.split("?", 1)[1].split("&"):
+                    k, _, v = part.partition("=")
+                    q[k] = urllib.parse.unquote_plus(v)
+            return self._send(200, json.dumps(read_day(q.get("day", ""))),
                               "application/json")
         if path in ("/report", "/download/report.html"):
             q = {}
