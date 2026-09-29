@@ -770,9 +770,8 @@ PAGE = """<!doctype html>
  .phasebar{margin-top:12px}
  .phasebar .pbar{height:16px;width:100%;min-width:0;border-radius:4px}
  html.paper .phasebar .pbar{border-radius:0;border:1px solid #000;background:none}
- .phasebar .lbls{display:flex;gap:18px;flex-wrap:wrap;align-items:center;
-   font-size:12px;opacity:.75;margin-top:6px}
- .phasebar .sw{width:16px;height:10px}
+ /* The line under it is a plain .key, exactly like the one at the foot of the
+    static table, so the same three colours are named the same way twice. */
 </style>
 <header>
 <div class="mast">
@@ -1535,18 +1534,18 @@ function paintPhaseBar(){
   const tot=secs.reduce((a,b)=>a+b,0);
   const live=tot>0.05;
   const w=names.map((n,i)=>live?secs[i]/tot*100:100/names.length);
-  const tip=names.map((n,i)=>n+' '+secs[i].toFixed(1)+' s').join(' \u00b7 ');
+  const tip=names.map((n,i)=>n+' '+secs[i].toFixed(1)+' s, '+
+    fmtE((((q||{}).phases||{})[n]||{}).joules||0)).join(' \u00b7 ');
   box.innerHTML=
     '<div class="pbar"'+(live?' title="'+esc(tip)+'"':' style="opacity:.42"')+'>'+
     names.map((n,i)=>'<span style="width:'+w[i].toFixed(1)+'%;background:'+
       PHC(n)+'"></span>').join('')+'</div>'+
-    '<div class="lbls">'+
-    names.map((n,i)=>'<span><span class="sw" style="background:'+PHC(n)+'"></span>'+n+
-      (live?' <b>'+secs[i].toFixed(1)+' s</b>':'')+'</span>').join('')+
-    '<span style="opacity:.6;margin-left:auto">'+
-    (live?'the last question, phase by phase'
-         :'no question logged yet \u2014 these are the colours the graph uses')+
-    '</span></div>';
+    '<div class="key">phases:'+
+    names.map((n,i)=>'<span class="sw" style="background:'+PHC(n)+
+      ';margin-left:'+(i?12:10)+'px"></span>'+n).join('')+
+    (live?'':'<span style="opacity:.6;margin-left:16px">'+
+      '\u2014 nothing asked yet, so these are only the colours</span>')+
+    '</div>';
 }
 $('skin').onclick=()=>{
   localStorage.setItem('skin',localStorage.getItem('skin')==='plain'?'paper':'plain');
