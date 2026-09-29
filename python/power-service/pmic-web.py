@@ -71,6 +71,33 @@ INA219_SHUNT_OHMS = float(env("INA219_SHUNT_OHMS", "0.1"))
 PISUGAR = (env("PISUGAR_HOST", "127.0.0.1"), int(env("PISUGAR_PORT", "8423")))
 BATTERY_MAH = int(env("BATTERY_MAH", "1200"))
 BATTERY_NOMINAL_V = float(env("BATTERY_NOMINAL_V", "3.7"))
+
+# The cloud comparison.
+#
+# ecocost turns a model name and a token count into an estimate of what that
+# question would have cost in a data centre. It cannot measure anything, it
+# cannot be told what was measured here, and it has never heard of the half
+# billion parameter model this bot runs. So it is only ever used the other way
+# round: to price the same question as if it had been asked of a cloud model,
+# next to the joules that were actually spent answering it here.
+#
+# Everything it needs ships inside the package, so it keeps working with no
+# network, which on this Pi is the normal state rather than the exception.
+try:
+    import ecocost
+except Exception:                                    # not installed, or broken
+    ecocost = None
+
+COMPARE_MODEL = env("COMPARE_MODEL", "gpt-4o")
+# The question log records how long the answering phase lasted but not how many
+# tokens came out of it, so the count is derived from a rate. Measured on this
+# Pi through /api/ask: qwen2.5:0.5b produces about 13 tokens a second. Measure
+# it again with the ask panel if the model changes, and set the variable.
+TOKENS_PER_SECOND = float(env("TOKENS_PER_SECOND", "13.3"))
+# Rough across English prose, and only ever used for the question and the
+# system prompt, which are both short enough that the error stays small next to
+# the factor-of-eighteen uncertainty in the estimate itself.
+CHARS_PER_TOKEN = 4.0
 BATTERY_JOULES = BATTERY_MAH / 1000 * 3600 * BATTERY_NOMINAL_V   # about 15980 J
 
 # How far the battery must fall before a calibration figure means anything.
@@ -884,6 +911,13 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div class="key">Every time you hold the button on the bot, the whole cycle is logged here with the model
   that was loaded when it answered. Saved to disk, so restarts do not lose it.</div>
 <div id="qlog"></div>
+
+<h2 style="margin-top:34px">What if you had asked a cloud model?</h2>
+<div class="key" id="comparenote"></div>
+<div class="row" style="align-items:center;gap:10px;margin:10px 0 4px">
+  <label>Compare with <select id="cmodel"></select></label>
+</div>
+<div id="compare"></div>
 <div class="key" id="files"></div>
 </section>
 
@@ -1401,6 +1435,7 @@ function showTab(name){
   document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!=='tab-'+name));
   try{localStorage.setItem('solarbot-tab',name);}catch(e){}
   if(name==='report') loadReport();
+  if(name==='static') loadCompare();
   if(name==='history'){ loadDays(); }
 }
 /* ---- history ----------------------------------------------------------
@@ -1496,6 +1531,69 @@ function drawHist(){
   x.fillStyle=paper?'#162dab':'#3e6ebe';x.fillText('cpu W',L+64,T+12);
 }
 $('day').onchange=loadDay;
+
+/* ---- the cloud comparison ---------------------------------------------
+   The page measures what a question cost on this Pi. ecocost estimates what
+   the same question would have cost in a data centre. Putting the two next to
+   each other is the only honest use of it: it cannot measure, and it has never
+   heard of the model running here. */
+let cmp=null;
+async function loadCompare(){
+  try{
+    const m=$('cmodel').value;
+    cmp=await (await fetch('api/compare'+(m?'?model='+encodeURIComponent(m):''))).json();
+  }catch(e){ cmp=null; }
+  renderCompare();
+}
+function renderCompare(){
+  const box=$('compare'), note=$('comparenote');
+  if(!cmp||!cmp.available){
+    note.textContent='Not available: the ecocost package is not installed on the Pi.';
+    box.innerHTML=''; $('cmodel').innerHTML=''; return;
+  }
+  const sel=$('cmodel');
+  if(!sel.options.length){
+    sel.innerHTML=(cmp.models||[]).map(m=>'<option'+(m===cmp.model?' selected':'')+'>'+m+'</option>').join('');
+  }
+  note.innerHTML='Your questions priced as if a data centre had answered them, by '+
+    '<a href="https://gooey.ai/ecocost" target="_blank" rel="noopener">ecocost</a>. '+
+    'It works from token counts alone, so the answer length is derived from how long '+
+    'the answering phase took at <b>'+cmp.tokens_per_second+' tokens a second</b>, measured '+
+    'on this Pi for '+esc(cmp.bot_model||'the local model')+'. '+
+    'The range is the estimate\u2019s own: ecocost does not know which chip, which data '+
+    'centre or which grid answered, and says so.';
+  const rows=cmp.questions||[];
+  if(!rows.length){ box.innerHTML='<div class="key">Nothing to compare yet.</div>'; return; }
+  const here=rows.reduce((s,r)=>s+(r.measured||0),0);
+  const there=rows.reduce((s,r)=>s+(r.joules||0),0);
+  const lo=rows.reduce((s,r)=>s+(r.min||0),0), hi=rows.reduce((s,r)=>s+(r.max||0),0);
+  const ratio=here>0?there/here:0;
+  box.innerHTML=
+    '<div class="key" style="font-size:14px;margin:12px 0 2px">'+
+    'These <b>'+rows.length+'</b> questions cost <b>'+fmtE(here)+'</b> here. On <b>'+
+    esc(cmp.model)+'</b> the same questions come out at <b>'+fmtE(there)+'</b>'+
+    (ratio?', about <b>'+ratio.toFixed(0)+' times as much</b>':'')+
+    ' \u2014 somewhere between '+fmtE(lo)+' and '+fmtE(hi)+'.</div>'+
+    '<table style="margin-top:14px"><tr><th>time</th><th>question</th>'+
+    '<th class="n">here</th><th class="n">'+esc(cmp.model)+'</th>'+
+    '<th class="n">range</th><th class="n">times more</th>'+
+    '<th class="n">CO\u2082</th><th class="n">water</th></tr>'+
+    rows.slice().sort((a,b)=>b.t-a.t).map(r=>{
+      const x=r.measured>0?(r.joules/r.measured):0;
+      return '<tr>'+
+      '<td>'+clock(r.t)+'</td>'+
+      '<td class="q">'+esc(r.text||'-')+'</td>'+
+      '<td class="n">'+fmtE(r.measured||0)+'</td>'+
+      '<td class="n"><b>'+fmtE(r.joules)+'</b></td>'+
+      '<td class="n" title="'+esc(r.tokens_in+' tokens in, '+r.tokens_out+
+        ' out \u00b7 confidence: '+r.confidence)+'">'+fmtE(r.min)+' \u2013 '+fmtE(r.max)+'</td>'+
+      '<td class="n">'+(x?x.toFixed(0)+'\u00d7':'-')+'</td>'+
+      '<td class="n">'+r.co2_g.toFixed(3)+' g</td>'+
+      '<td class="n">'+r.water_ml.toFixed(2)+' mL</td>'+
+      '</tr>';
+    }).join('')+'</table>';
+}
+$('cmodel').onchange=loadCompare;
 
 const redraw=()=>{
   unitNote();renderQ();renderScatter();renderAsk();poll();
@@ -1823,6 +1921,56 @@ def read_day(day):
     }
 
 
+def compare_models():
+    """The cloud models worth offering in the dropdown.
+
+    The knowledge base holds seventy-odd models, most of them provider variants
+    nobody would recognise. These are the families you would actually name when
+    asked "what if I had asked ChatGPT instead".
+    """
+    if ecocost is None:
+        return []
+    try:
+        ids = sorted(ecocost.get_kb().models)
+    except Exception:
+        return []
+    keep = ("gpt-", "claude-", "gemini-", "deepseek-", "grok")
+    return [m for m in ids if m.startswith(keep)]
+
+
+def compare_question(q, model):
+    """What one logged question would have cost in a data centre, in joules.
+
+    Returns None when there is honestly nothing to say: no ecocost installed, a
+    model it does not know, or a question that never reached the answering
+    phase and so has no output to price.
+    """
+    if ecocost is None:
+        return None
+    answering = ((q.get("phases") or {}).get("answering") or {}).get("seconds") or 0
+    if answering <= 0:
+        return None
+    text = q.get("text") or ""
+    tokens_in = int((len(BOT_SYSTEM) + len(text)) / CHARS_PER_TOKEN) + 1
+    tokens_out = max(1, int(round(answering * TOKENS_PER_SECOND)))
+    try:
+        r = ecocost.estimate(model, input_tokens=tokens_in, output_tokens=tokens_out)
+    except Exception:
+        return None
+    e = r["energy"]
+    return {
+        # ecocost answers in watt-hours; the rest of this page speaks joules.
+        "joules": round(e["value"] * 3600, 1),
+        "min": round(e["min"] * 3600, 1),
+        "max": round(e["max"] * 3600, 1),
+        "co2_g": r["carbon"]["value"],
+        "water_ml": r["water"]["value"],
+        "confidence": r["confidence"]["level"],
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1875,6 +2023,33 @@ class Handler(BaseHTTPRequestHandler):
                                                "panel": pan,
                                                "session": session_report()}),
                               "application/json")
+        if path == "/api/compare":
+            q = {}
+            if "?" in self.path:
+                for part in self.path.split("?", 1)[1].split("&"):
+                    k, _, v = part.partition("=")
+                    q[k] = urllib.parse.unquote_plus(v)
+            model = q.get("model") or COMPARE_MODEL
+            out = []
+            with questions_lock:
+                rows = list(questions)
+            for item in rows:
+                c = compare_question(item, model)
+                if not c:
+                    continue
+                c.update(t=item.get("t"), iso=item.get("iso"),
+                         text=item.get("text"),
+                         measured=item.get("above_idle"),
+                         seconds=(item.get("total") or {}).get("seconds"))
+                out.append(c)
+            return self._send(200, json.dumps({
+                "available": ecocost is not None,
+                "model": model,
+                "models": compare_models(),
+                "tokens_per_second": TOKENS_PER_SECOND,
+                "bot_model": BOT_MODEL,
+                "questions": out,
+            }), "application/json")
         if path == "/api/days":
             # Which days there is anything to look at, newest first.
             try:
