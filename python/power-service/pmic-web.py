@@ -926,6 +926,7 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div class="key">Every time you hold the button on the bot, the whole cycle is logged here with the model
   that was loaded when it answered. Saved to disk, so restarts do not lose it.</div>
 <div id="qlog"></div>
+<div class="key" id="qfiles"></div>
 
 <details id="cmpbox">
 <summary>What if you had asked a cloud model?</summary>
@@ -935,7 +936,6 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 </div>
 <div id="compare"></div>
 </details>
-<div class="key" id="qfiles"></div>
 </section>
 
 <section id="tab-calib" class="panel" hidden>
