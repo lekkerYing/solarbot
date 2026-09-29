@@ -727,6 +727,21 @@ PAGE = """<!doctype html>
  html.paper a:hover{color:#828282}
  html.paper textarea,html.paper select{background:none;border:1px solid #000}
  html.paper .tag{background:none;border:1px solid #000}
+ /* The last box on the page. Every card and report row had already turned into
+    a rule with space under it, and this one white rounded panel was left over
+    from before, sitting in the middle of the page shouting. Her site has no
+    boxes at all, so it becomes a ruled section like the rest and the heading
+    joins the machine voice. */
+ html.paper details{background:none;border:0;border-top:1px solid #000;
+   border-radius:0;padding:12px 0 0;margin-top:30px}
+ html.paper summary{font-family:"Courier New",Courier,monospace;
+   font-weight:normal;text-transform:uppercase;letter-spacing:.09em;font-size:12px}
+ html.paper summary::marker{color:#828282}
+ html.paper details[open] summary{margin-bottom:2px}
+ /* The answer itself was a second box inside the first one. */
+ html.paper .ans{background:none;border:0;border-left:2px solid #000;
+   border-radius:0;padding:2px 0 2px 14px;margin-top:14px;
+   font-family:Georgia,"Times New Roman",serif}
  /* Her site states what the page weighed, down in the corner. This page is
     about what things cost, so it says the same thing in the same place. */
  #pagecost{display:none}
