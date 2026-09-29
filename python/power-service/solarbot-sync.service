@@ -1,0 +1,29 @@
+# Stuurt de logs naar het online dashboard zodra de Pi erbij kan.
+#
+# Installeren op de Pi, zodra er een SYNC_URL is:
+#   mkdir -p ~/.config/systemd/user
+#   cp solarbot-sync.service ~/.config/systemd/user/
+#   nano ~/.config/systemd/user/solarbot-sync.service   # vul het adres in
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now solarbot-sync
+#
+# Let op: dit hoort NIET op network-online.target te wachten. Het hele punt is
+# dat hij blijft proberen, en een mislukte poging is hier de normale gang van
+# zaken en geen fout.
+[Unit]
+Description=Solarbot power log sync
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/solarbot/python/power-service
+Environment=SYNC_URL=
+Environment=SYNC_TOKEN=
+Environment=SYNC_DEVICE=solarpi
+Environment=SYNC_EVERY=300
+ExecStart=/usr/bin/python3 -u %h/solarbot/python/power-service/sync.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
