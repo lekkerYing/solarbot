@@ -618,6 +618,10 @@ PAGE = """<!doctype html>
  .tabs button.on{background:#fffdf5;border-color:var(--line);color:var(--ink);font-weight:600}
  /* Left: what is happening now. Right: everything you look back at. */
  .tabs button.apart{margin-left:auto}
+ /* Pushed right where there is room. A phone takes this back in one place,
+    because an element that cannot shrink below its own words is exactly what
+    gets shoved off the edge of a narrow screen. */
+ .pushright{margin-left:auto}
  .panel{padding-top:20px}
  .panel[hidden]{display:none}
  /* Tooltips must never run off a narrow screen. */
@@ -808,8 +812,10 @@ PAGE = """<!doctype html>
       Calibration hung off the end. Trimming the padding buys back 40 and they
       all fit. The overflow stays as a safety net for anything narrower again,
       but without a scrollbar drawn across the tabs. */
-   .tabs button{padding:8px 9px}
-   .tabs button.apart{margin-left:10px}
+   /* Smaller again, to buy back the room the left/right split needs: without
+      spare width margin-left:auto has nothing to push with. */
+   .tabs button{padding:8px 6px;font-size:12px}
+   .tabs button.apart{margin-left:auto}
    .tabs{scrollbar-width:none}
    .tabs::-webkit-scrollbar{display:none}
 
@@ -817,7 +823,7 @@ PAGE = """<!doctype html>
       auto. That is a nice touch on a wide screen and the thing most likely to
       be pushed off a narrow one, since the link cannot be made narrower than
       its own words. On a phone it just follows the day picker. */
-   #dayfile{margin-left:0 !important}
+   .pushright{margin-left:0}
    .key,#daynote,#dayfile{overflow-wrap:anywhere}
 
    /* A guard, not a fix: whatever else turns out to be a pixel too wide, it
@@ -899,7 +905,7 @@ Look on the back of the panel or on its packaging. If it lists volts and amps in
 Note that the rating is for full sun, straight on. In practice you get less, so the seconds shown are a best case and the real time is longer. Measuring the panel input with a sensor would give the true figure."></i>
     <input id="panel" type="number" min="0.1" step="0.5" value="5" style="width:70px;margin-left:6px"> W</div>
   <div class="key" id="unitnote" style="margin:0"></div>
-  <div style="margin-left:auto;flex:0 0 auto"><span class="lbl">what is measured</span><i class="i r d wide" tabindex="0" data-tip="Measured from the Raspberry Pi 5's own PMIC, which reports voltage and current for the board's internal rails. The Pi measures itself, no external sensor is involved.
+  <div class="pushright" style="flex:0 0 auto"><span class="lbl">what is measured</span><i class="i r d wide" tabindex="0" data-tip="Measured from the Raspberry Pi 5's own PMIC, which reports voltage and current for the board's internal rails. The Pi measures itself, no external sensor is involved.
 
 What you see is the processor, the memory and the wifi chip. That is where the thinking happens. The green line is VDD_CORE, the processor on its own.
 
@@ -944,7 +950,7 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div class="row" style="align-items:center;gap:10px;margin-bottom:10px">
   <label>Day <select id="day"></select></label>
   <span class="key" id="daynote"></span>
-  <span class="key" id="dayfile" style="margin-left:auto"></span>
+  <span class="key pushright" id="dayfile"></span>
 </div>
 <canvas id="hc" width="1200" height="380"></canvas>
 <div class="key">A whole day at once, so you can compare one day with another. Each
@@ -1011,7 +1017,7 @@ To get the true battery cost, either put a sensor in the battery lead, or run a 
 <div class="row" style="align-items:center;margin-bottom:6px">
   <h2 style="margin:0">Report</h2>
   <label style="margin-left:18px">Day <select id="rday"></select></label>
-  <div style="margin-left:auto"><a id="dl" class="btn" download="solarbot-energy-report.html">Download</a></div>
+  <div class="pushright"><a id="dl" class="btn" download="solarbot-energy-report.html">Download</a></div>
 </div>
 <div id="reportbody"></div>
 </section>
