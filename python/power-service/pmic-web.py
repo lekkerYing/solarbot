@@ -630,7 +630,7 @@ PAGE = """<!doctype html>
    /* A sticky header eats half a phone screen, so let it scroll away. */
    header{position:static;box-shadow:none;padding-top:12px}
    h1{font-size:19px;margin-bottom:10px}
-   .strip .big{font-size:18px;white-space:nowrap}
+   .strip .big{font-size:18px}
    .big .sub{font-size:12px;margin-left:5px}
    /* Five tabs will not fit side by side, so they scroll. The old
       -webkit-overflow-scrolling has done nothing since iOS 13 except promote
@@ -812,6 +812,19 @@ PAGE = """<!doctype html>
    .tabs button.apart{margin-left:10px}
    .tabs{scrollbar-width:none}
    .tabs::-webkit-scrollbar{display:none}
+
+   /* The history row put the download link out to the right with margin-left
+      auto. That is a nice touch on a wide screen and the thing most likely to
+      be pushed off a narrow one, since the link cannot be made narrower than
+      its own words. On a phone it just follows the day picker. */
+   #dayfile{margin-left:0 !important}
+   .key,#daynote,#dayfile{overflow-wrap:anywhere}
+
+   /* A guard, not a fix: whatever else turns out to be a pixel too wide, it
+      may not drag the whole page sideways with it. clip rather than hidden,
+      because hidden would make the page a scroll container and break the
+      boxes that are supposed to scroll on their own, and sticky with them. */
+   html,body{overflow-x:clip}
 
    /* Fixed to the bottom corners is margin on a desktop and the last line of
       the text on a phone. Down here they simply end the page. */
