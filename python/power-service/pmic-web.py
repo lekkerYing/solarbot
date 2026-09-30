@@ -826,11 +826,31 @@ PAGE = """<!doctype html>
    .pushright{margin-left:0}
    .key,#daynote,#dayfile{overflow-wrap:anywhere}
 
+   /* The report is the thing you hand to someone, so on a phone it has to be
+      readable rather than draggable. Its two tables were 608 and 367 pixels
+      wide in a 336 pixel column and could not be squeezed: the headers are
+      nowrap, and "avg cost of a question" on one line sets the floor. Letting
+      the headers break and sharing the width evenly, both fit exactly.
+
+      The questions table on the static tab keeps its sideways scroll on
+      purpose. Ten columns in 336 pixels would be unreadable, and that one is
+      for looking things up rather than for handing over. */
+   #reportbody table{width:100%;table-layout:auto}
+   /* Wrapping at spaces only. Breaking anywhere also fits, but it turns
+      "questions" into "questi ons" and "battery" into "batter y", which is
+      worse than the scroll it replaced. The headers give up their letter
+      spacing and a point of size instead, which is what makes it fit. */
+   #reportbody th,#reportbody td{white-space:normal;overflow-wrap:normal;
+     padding:5px 4px}
+   #reportbody th{letter-spacing:0;font-size:10px}
+
    /* A guard, not a fix: whatever else turns out to be a pixel too wide, it
       may not drag the whole page sideways with it. clip rather than hidden,
-      because hidden would make the page a scroll container and break the
-      boxes that are supposed to scroll on their own, and sticky with them. */
-   html,body{overflow-x:clip}
+      because hidden would make the page a scroll container and take the boxes
+      that are supposed to scroll on their own down with it. hidden is left in
+      front of it for Safari before 16, which ignores clip entirely and would
+      otherwise be left with no guard at all. */
+   html,body{overflow-x:hidden;overflow-x:clip}
 
    /* Fixed to the bottom corners is margin on a desktop and the last line of
       the text on a phone. Down here they simply end the page. */
