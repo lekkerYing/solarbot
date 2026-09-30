@@ -630,12 +630,7 @@ PAGE = """<!doctype html>
    /* A sticky header eats half a phone screen, so let it scroll away. */
    header{position:static;box-shadow:none;padding-top:12px}
    h1{font-size:19px;margin-bottom:10px}
-   .strip{gap:8px}
-   .strip .card{flex:1 1 calc(50% - 4px);min-width:0;padding:7px 10px}
    .strip .big{font-size:18px;white-space:nowrap}
-   /* Without this the longest card decides the width for all of them and they
-      go back to one per row, which is four screens of header before the tabs. */
-   .strip .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
    .big .sub{font-size:12px;margin-left:5px}
    /* Five tabs will not fit side by side, so they scroll. The old
       -webkit-overflow-scrolling has done nothing since iOS 13 except promote
@@ -645,11 +640,6 @@ PAGE = """<!doctype html>
    .tabs button{padding:8px 12px;font-size:13px;white-space:nowrap}
    .tabs button.apart{margin-left:12px}
    .panel{padding-top:16px}
-   /* On a wide screen these two sit in the margin. On a phone there is no
-      margin, so they lay themselves over the last line of the page. They join
-      the flow instead and end up where they read as a footer. */
-   html.paper #pagecost,#skin{position:static;display:block;text-align:center;
-     margin:22px auto 0;opacity:.6}
    canvas{height:220px}
    .card{flex:1 1 calc(50% - 6px)}
    textarea{min-height:76px}
@@ -796,6 +786,38 @@ PAGE = """<!doctype html>
    background:none;border:0;color:inherit;opacity:.55;padding:2px 4px;
    font-family:"Courier New",Courier,monospace;border-radius:0}
  #skin:hover{opacity:1}
+
+ /* ---------------------------------------------------------------------
+    Phone, last word.
+
+    These belong at the end and not with the other narrow-screen rules higher
+    up, because a media query adds no specificity: a plain rule further down
+    the sheet beats it. Both of the things below were written up there first
+    and quietly lost to the paper skin, which is declared after them. */
+ @media (max-width:700px){
+   /* Two across, without arithmetic. Sizing the cards at "half minus the gap"
+      needs the gap to be what you think it is, and it was not: twelve, not
+      eight, so two cards plus the gap came to four pixels more than the row
+      and they fell back to one each. A grid is told the columns and works the
+      gap out itself, so it cannot be wrong by four pixels. */
+   .strip{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+   .strip .card{min-width:0;padding:7px 10px}
+   .strip .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+   /* Five tabs wanted 356 pixels in a 333 pixel row, so the bar scrolled and
+      Calibration hung off the end. Trimming the padding buys back 40 and they
+      all fit. The overflow stays as a safety net for anything narrower again,
+      but without a scrollbar drawn across the tabs. */
+   .tabs button{padding:8px 9px}
+   .tabs button.apart{margin-left:10px}
+   .tabs{scrollbar-width:none}
+   .tabs::-webkit-scrollbar{display:none}
+
+   /* Fixed to the bottom corners is margin on a desktop and the last line of
+      the text on a phone. Down here they simply end the page. */
+   html.paper #pagecost,#skin{position:static;display:block;width:auto;
+     text-align:center;margin:26px auto 0;opacity:.6}
+ }
  /* A dropdown keeps the operating system's own look unless you take it off,
     which is why it stayed grey and rounded while everything around it changed. */
  html.paper select{appearance:none;-webkit-appearance:none;background:none;
