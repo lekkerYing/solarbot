@@ -597,7 +597,8 @@ PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Solarbot power</title>
 <style>
- :root{--bg:#fff5d1;--ink:#2b2320;--line:#c9b98a;--hi:#d2691e;--core:#3a7d6c;--wide:1100px}
+ :root{--bg:#fff5d1;--ink:#2b2320;--line:#c9b98a;--hi:#d2691e;--core:#3a7d6c;
+   --dim:#9a8a6a;--wide:1100px}
  *{box-sizing:border-box}
  body{margin:0;padding:0 16px 28px;font:14px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
  h1{font-size:22px;font-weight:600;margin:0 0 14px;text-align:center;letter-spacing:.02em}
@@ -610,10 +611,11 @@ PAGE = """<!doctype html>
  .strip .card{flex:1 1 120px;padding:8px 12px}
  .strip .big{font-size:21px}
  .tabs{display:flex;gap:3px;border-bottom:1px solid var(--line);margin:4px 0 0}
- .tabs button{background:none;border:1px solid transparent;border-bottom:none;color:inherit;
-   border-radius:9px 9px 0 0;padding:8px 18px;cursor:pointer;opacity:.6;margin-bottom:-1px}
- .tabs button:hover{opacity:.9}
- .tabs button.on{background:#fffdf5;border-color:var(--line);opacity:1;font-weight:600}
+ .tabs button{background:none;border:1px solid transparent;border-bottom:none;
+   color:var(--dim);border-radius:9px 9px 0 0;padding:8px 18px;cursor:pointer;
+   margin-bottom:-1px}
+ .tabs button:hover{color:var(--ink)}
+ .tabs button.on{background:#fffdf5;border-color:var(--line);color:var(--ink);font-weight:600}
  /* Left: what is happening now. Right: everything you look back at. */
  .tabs button.apart{margin-left:auto}
  .panel{padding-top:20px}
@@ -629,14 +631,25 @@ PAGE = """<!doctype html>
    header{position:static;box-shadow:none;padding-top:12px}
    h1{font-size:19px;margin-bottom:10px}
    .strip{gap:8px}
-   .strip .card{flex:1 1 calc(50% - 4px);padding:7px 10px}
-   .strip .big{font-size:18px}
-   .big .sub{font-size:12px;margin-left:6px}
-   /* Four tabs will not fit side by side, so they scroll. */
-   .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+   .strip .card{flex:1 1 calc(50% - 4px);min-width:0;padding:7px 10px}
+   .strip .big{font-size:18px;white-space:nowrap}
+   /* Without this the longest card decides the width for all of them and they
+      go back to one per row, which is four screens of header before the tabs. */
+   .strip .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   .big .sub{font-size:12px;margin-left:5px}
+   /* Five tabs will not fit side by side, so they scroll. The old
+      -webkit-overflow-scrolling has done nothing since iOS 13 except promote
+      its children to their own layers, which is half of why the selected tab
+      lost its letters. */
+   .tabs{overflow-x:auto}
    .tabs button{padding:8px 12px;font-size:13px;white-space:nowrap}
    .tabs button.apart{margin-left:12px}
    .panel{padding-top:16px}
+   /* On a wide screen these two sit in the margin. On a phone there is no
+      margin, so they lay themselves over the last line of the page. They join
+      the flow instead and end up where they read as a footer. */
+   html.paper #pagecost,#skin{position:static;display:block;text-align:center;
+     margin:22px auto 0;opacity:.6}
    canvas{height:220px}
    .card{flex:1 1 calc(50% - 6px)}
    textarea{min-height:76px}
@@ -748,8 +761,9 @@ PAGE = """<!doctype html>
  html.paper button,html.paper .btn{background:none;color:#000;border:1px solid #000}
  html.paper button:hover,html.paper .btn:hover{background:#000;color:#fff5d1}
  html.paper .tabs{border-bottom:1px solid #000}
+ html.paper .tabs button{color:#828282}
  html.paper .tabs button.on{background:none;border-color:transparent;
-   border-bottom:2px solid #000;font-weight:normal;opacity:1}
+   border-bottom:2px solid #000;font-weight:normal;color:#000}
  html.paper a{text-decoration:none;border-bottom:1px solid;padding-bottom:.05em}
  html.paper a:hover{color:#828282}
  html.paper textarea,html.paper select{background:none;border:1px solid #000}
